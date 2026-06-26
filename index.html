@@ -40,7 +40,7 @@ let platformWidth;
 let platformHeight;
 let platformStart;
 
-let gravity = 0.35; // Увеличил для лучшей физики
+let gravity = 0.35; 
 let bounceVelocity = -16.0;
 
 let minPlatformSpace = 80;
@@ -66,7 +66,7 @@ const PLAYER_SCALE = 0.25;
 // FPS контроллер
 let lastTime = performance.now();
 let fpsCorrection = 0;
-const TARGET_FPS = 65;
+let TARGET_FPS = 65;
 let fpsHistory = [];
 const HISTORY_SIZE = 10;
 
@@ -85,6 +85,11 @@ function resize() {
   
   canvas.width = cWidth;
   canvas.height = cHeight;
+  //console.log(cHeight);
+  const scale_coef = cHeight / 700;
+  //TARGET_FPS = scale_coef / 2 * 65; 
+  gravity = scale_coef * 0.35; 
+  bounceVelocity = scale_coef * -16.0;
   
   platformStart = cHeight * 0.65;
   platformWidth = cWidth * 0.3;
@@ -103,7 +108,7 @@ scoreOverlay.style.cssText = `
   left: 50%;
   transform: translateX(-50%);
   color: white;
-  font-size: 24px;
+  font-size: 2.2vh;
   font-weight: bold;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
   z-index: 10;
@@ -112,7 +117,7 @@ scoreOverlay.style.cssText = `
   font-family: Arial, sans-serif;
   background: rgba(0,0,0,0.3);
   padding: 5px 10px;
-  border-radius: 20px;
+  border-radius: 1.5vh;
   backdrop-filter: blur(5px);
 `;
 document.body.appendChild(scoreOverlay);
@@ -404,7 +409,7 @@ function update() {
     const overlay = document.createElement('div');
     overlay.id = 'ui-overlay';
     overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;z-index:10;text-shadow:2px 2px 4px rgba(0,0,0,0.5)';
-    overlay.innerHTML = '<div style="font-size:48px;font-weight:bold;margin-bottom:10px;">Ксюша Jump</div><div style="font-size:18px;opacity:0.8;">Игра окончена! Кликните чтобы начать 🎮</div>';
+    overlay.innerHTML = `<div style="font-size:4vh;font-weight:bold;margin-bottom:1vh;">Ксюша Jump</div><div style="font-size:3vh;opacity:0.8;">Игра окончена!<br>Кликните чтобы начать 🎮</div>`;
     document.body.appendChild(overlay);
   }
 }
@@ -418,7 +423,7 @@ function render() {
   
   platforms.forEach(function(platform) {
     context.beginPath();
-    context.roundRect(platform.x, platform.y, platformWidth, platformHeight, 10);
+    context.roundRect(platform.x, platform.y, platformWidth, platformHeight, platformHeight/2);
     context.fill();
     context.strokeStyle = 'rgba(0,0,0,0.3)';
     context.lineWidth = 5;
@@ -516,7 +521,6 @@ canvas.addEventListener('click', () => {
 });
 
 canvas.addEventListener('touchstart', (e) => {
-  e.maxentDefault();
   const touch = e.touches[0];
   const rect = canvas.getBoundingClientRect();
   mouseX = (touch.clientX - rect.left) / canvas.width * canvas.width;
@@ -564,7 +568,7 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 const overlay = document.createElement('div');
 overlay.id = 'ui-overlay';
 overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;z-index:10;text-shadow:2px 2px 4px rgba(0,0,0,0.5)';
-overlay.innerHTML = '<div style="font-size:48px;font-weight:bold;margin-bottom:10px;">Ксюша Jump</div><div style="font-size:18px;opacity:0.8;">Кликните чтобы начать 🎮</div>';
+overlay.innerHTML = '<div style="font-size:4vh;font-weight:bold;margin-bottom:1vh;">Ксюша Jump</div><div style="font-size:3vh;opacity:0.8;">Кликните чтобы начать 🎮</div>';
 document.body.appendChild(overlay);
 
 
