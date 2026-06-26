@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ксюша Jump</title>
+  <meta charset="UTF-8">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background-color: #2e3338;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      background-color: #96c5ea;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      border: 1px solid black;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+о<script>
+// ============================================
+// ОРИГИНАЛЬНЫЙ РАБОЧИЙ КОД С МИНИМАЛЬНЫМИ УЛУЧШЕНИЯМИ
+// ============================================
+
+
+const canvas = document.getElementById('game');
+const context = canvas.getContext('2d');
+
+// Параметры
+let platformWidth;
+let platformHeight;
+let platformStart;
+
+let gravity = 0.35; // Увеличил для лучшей физики
+let bounceVelocity = -16.0;
+
+let minPlatformSpace = 80;
+let maxPlatformSpace = 100;
+let gameStart = false;
+let happy_birthday_overlay = false;
+
+// Переменные для очков
+let score = 0;
+let maxScore = 0;
+
+// Спрайт
+const sprite = new Image();
+sprite.src = "./img.png";
+let sprite_is_load = false;
+
+const ASPECT_RATIO = 9 / 16;
+const SPRITE_WIDTH = 400;
+const SPRITE_HEIGHT = 540;
+const SPRITE_RATIO = 1.35;
+const PLAYER_SCALE = 0.25;
+
+// FPS контроллер
+let lastTime = performance.now();
+let fpsCorrection = 0;
+const TARGET_FPS = 65;
+let fpsHistory = [];
+const HISTORY_SIZE = 10;
+
+function resize() {
+  const windowHeight = window.innerHeight;
+  const windowWidth = window.innerWidth;
+  
+  let cWidth, cHeight;
+  if (windowWidth / windowHeight > ASPECT_RATIO) {
+    cHeight = windowHeight;
+    cWidth = cHeight * ASPECT_RATIO;
+  } else {
+    cWidth = windowWidth;
+    cHeight = cWidth / ASPECT_RATIO;
+  }
+  
+  canvas.width = cWidth;
+  canvas.height = cHeight;
+  
+  platformStart = cHeight * 0.65;
+  platformWidth = cWidth * 0.3;
+  platformHeight = platformWidth * 0.2;
+  minPlatformSpace = cHeight * 0.1;
+  maxPlatformSpace = cHeight * 0.2;
+}
+resize();
+
+// Создаем оверлей для очков
+const scoreOverlay = document.createElement('div');
+scoreOverlay.id = 'score-overlay';
+scoreOverlay.style.cssText = `
+  position: absolute;
+  top: 1%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
+  font-family: Arial, sans-serif;
+  background: rgba(0,0,0,0.3);
+  padding: 5px 10px;
+  border-radius: 20px;
+  backdrop-filter: blur(5px);
+`;
+document.body.appendChild(scoreOverlay);
+
+
+let heartParticles = [];
+const HEART_COUNT = 80;
+// Класс сердечка
+class HeartParticle {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height - canvas.height;
+    this.size = Math.random() * 20 + 10;
+    this.speed = Math.random() * 2 + 0.5;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+    this.opacity = Math.random() * 0.5 + 0.5;
+    this.wobble = Math.random() * 100;
+    this.wobbleSpeed = Math.random() * 0.02 + 0.01;
+    this.wobbleAmount = Math.random() * 2 + 0.5;
+    this.color = this.randomColor();
+  }
+
+  randomColor() {
+    const colors = [
+      '#ff6b6b', '#ff4757', '#ff6348', '#ff6b81',
+      '#e74c3c', '#ee5a24', '#ff3366', '#ff1493'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  update() {
+    this.y += this.speed;
+    this.wobble += this.wobbleSpeed;
+    this.x += Math.sin(this.wobble) * this.wobbleAmount;
+    this.rotation += this.rotationSpeed;
+
+    // Если сердечко ушло за экран, перезапускаем сверху
+    if (this.y > canvas.height + 20) {
+      this.x = Math.random() * canvas.width;
+      this.y = -20;
+      this.size = Math.random() * 20 + 10;
+      this.speed = Math.random() * 2 + 0.5;
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = this.opacity;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.scale(this.size / 25, this.size / 25);
+
+    // Рисуем сердечко
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-12, -12, -25, 0, 0, 20);
+    ctx.bezierCurveTo(25, 0, 12, -12, 0, 0);
+    ctx.closePath();
+
+    ctx.fillStyle = this.color;
+    ctx.shadowColor = 'rgba(255, 107, 107, 0.3)';
+    ctx.shadowBlur = 15;
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+// Функция создания сердечек
+function createHearts() {
+  heartParticles = [];
+  for (let i = 0; i < HEART_COUNT; i++) {
+    const heart = new HeartParticle();
+    heart.y = Math.random() * canvas.height;
+    heartParticles.push(heart);
+  }
+}
+// Функция обновления сердечек
+function updateHearts() {
+  heartParticles.forEach(heart => heart.update());
+}
+
+
+// Функция обновления очков
+function updateScore() {
+  scoreOverlay.innerHTML = `Очки: ${score} | Рекорд: ${maxScore}`;
+}
+updateScore();
+
+// Игрок
+const doodle = {
+  width: canvas.width * PLAYER_SCALE,
+  height: canvas.width * PLAYER_SCALE * SPRITE_RATIO,
+  x: canvas.width/2 - canvas.width * PLAYER_SCALE / 2,
+  y: canvas.height * 0.6,
+  dx: 0,
+  dy: 0,
+  anim: {
+    currentFrame: 1,
+    timer: 0,
+    blink_flag: false,
+    blink_time: 10
+  }
+};
+
+// Платформы
+let platforms = [];
+x = (canvas.width / 2 - doodle.width / 2);
+let y = canvas.height * 0.8;  
+platforms.push({x, y});
+
+y = platformStart;
+while (y > 0) {
+  y -= platformHeight + random(minPlatformSpace, maxPlatformSpace);
+  let x;
+  do {
+    x = random(canvas.width*0.05, canvas.width - canvas.width*0.05 - platformWidth);
+  } while (
+    y > canvas.height * 0.5 &&
+    x > canvas.width / 2 - platformWidth * 1.5 &&
+    x < canvas.width / 2 + platformWidth / 2
+  );
+  platforms.push({ x, y });
+}
+
+let mouseX = canvas.width / 2 - doodle.width / 2;
+let maxDoodleY = doodle.y;
+let hue = 90;
+
+
+function random(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function shouldUpdate() {
+  const currentTime = performance.now();
+  const delta = currentTime - lastTime;
+  const targetDelta = 1000 / (TARGET_FPS + fpsCorrection);
+
+  if (delta > targetDelta) {
+    lastTime = currentTime;
+    
+    const currentFPS = 1000 / delta;
+    fpsHistory.push(currentFPS);
+    if (fpsHistory.length > HISTORY_SIZE) {
+      fpsHistory.shift();
+    }
+    
+    const avgFPS = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+    const fpsDiff = avgFPS - TARGET_FPS;
+    const step = Math.abs(fpsDiff) < 2 ? 0.01 : 1;
+    fpsCorrection += fpsDiff > 0 ? -step : step;
+    fpsCorrection = Math.max(-TARGET_FPS * 0.3, Math.min(TARGET_FPS * 0.3, fpsCorrection));
+    
+    return true;
+  }
+  return false;
+}
+
+function update() {
+
+  if (happy_birthday_overlay) {
+    updateHearts();
+  }
+  
+  // Гравитация
+  doodle.dy += gravity;
+  
+  // Сохраняем позицию для коллизий
+  maxDoodleY = doodle.y;
+
+  // Движение камеры
+  if (doodle.y < canvas.height / 2 && doodle.dy < 0) {
+    const offset = -doodle.dy;
+    platforms.forEach(function(platform) {
+      platform.y += offset;
+    });
+
+    // Добавление платформ
+    while (platforms[platforms.length - 1].y > 0) {
+      platforms.push({
+        x: random(25, canvas.width - 25 - platformWidth),
+        y: platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace))
+      });
+      minPlatformSpace += 0.5;
+      maxPlatformSpace += 0.5;
+      maxPlatformSpace = Math.min(maxPlatformSpace, canvas.height / 2);
+    }
+  } else {
+    doodle.y += doodle.dy;
+  }
+
+  // Движение по X
+  if (gameStart) {
+    const targetX = mouseX - doodle.width / 2;
+    doodle.x += (targetX - doodle.x) * 0.15;
+  }
+
+  // Проверка коллизий
+  if (doodle.dy > 0) {
+    platforms.forEach(function(platform) {
+      const wasAbove = maxDoodleY + doodle.height <= platform.y;
+      const collides = doodle.x < platform.x + platformWidth &&
+                       doodle.x + doodle.width > platform.x &&
+                       doodle.y < platform.y + platformHeight &&
+                       doodle.y + doodle.height > platform.y;
+      
+      if (wasAbove && collides) {
+        doodle.y = platform.y - doodle.height;
+        doodle.dy = gameStart ? bounceVelocity : 0;  
+        if (gameStart) {
+          score += 1;
+          updateScore();
+        } 
+        if (score >= 28 && !happy_birthday_overlay && score < 29) { // Остановка при достижении очков
+          gameStart = false;
+          doodle.dy = 0;
+          happy_birthday_overlay = true;
+          createHearts();
+          setTimeout(() => {happy_birthday_overlay = false;}, 5000); // Автоматически скрыть через несколько секунд
+        }          
+      }
+
+
+    });
+  }
+
+  // Обновление анимации
+  const hyst = 1;
+  if (gameStart) {
+    if (doodle.dy < -hyst) doodle.anim.currentFrame = 4;
+    else if (doodle.dy > hyst * 2) doodle.anim.currentFrame = 2;
+    else doodle.anim.currentFrame = 3;
+  } else {
+    if (doodle.anim.blink_flag) {
+      doodle.anim.currentFrame = 0;
+      doodle.anim.timer++;
+      if (doodle.anim.timer > doodle.anim.blink_time) {
+        doodle.anim.timer = 0;
+        doodle.anim.blink_flag = false;
+      }
+    } else {
+      doodle.anim.currentFrame = 1;
+      doodle.anim.timer++;
+      if (doodle.anim.timer > doodle.anim.blink_time * parseInt(random(20, 50))) {
+        doodle.anim.timer = 0;
+        doodle.anim.blink_flag = true;
+      }
+    }
+  }
+
+  // Удаление платформ
+  platforms = platforms.filter(function(platform) {
+    return platform.y < canvas.height + 50;
+  });
+
+  // Game Over
+  if (doodle.y > canvas.height + 100 && gameStart) {
+    gameStart = false;
+    if (score > maxScore) maxScore = score;
+    score = 0;
+    updateScore();
+    doodle.y = platformStart - doodle.height;
+    doodle.dy = 0;
+    platforms = [];
+    x = (canvas.width / 2 - doodle.width / 2);
+    let y = canvas.height * 0.8; 
+    platforms.push({x, y});
+    doodle.x = canvas.width/2 - canvas.width * PLAYER_SCALE / 2,
+    doodle.y = canvas.height * 0.6,
+    y = platformStart;
+    while (y > 0) {
+      y -= platformHeight + random(minPlatformSpace, maxPlatformSpace);
+      let x;
+      do {
+        x = random(canvas.width*0.05, canvas.width - canvas.width*0.05 - platformWidth);
+      } while (
+        y > canvas.height / 2 &&
+        x > canvas.width / 2 - platformWidth * 1.5 &&
+        x < canvas.width / 2 + platformWidth / 2
+      );
+      platforms.push({ x, y });
+    }
+    document.querySelector('#ui-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'ui-overlay';
+    overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;z-index:10;text-shadow:2px 2px 4px rgba(0,0,0,0.5)';
+    overlay.innerHTML = '<div style="font-size:48px;font-weight:bold;margin-bottom:10px;">Ксюша Jump</div><div style="font-size:18px;opacity:0.8;">Игра окончена! Кликните чтобы начать 🎮</div>';
+    document.body.appendChild(overlay);
+  }
+}
+
+function render() {
+  context.clearRect(0,0,canvas.width,canvas.height);
+  
+  // Платформы
+  if (gameStart) hue = (hue + 0.15) % 360;
+  context.fillStyle = `hsl(${hue}, 80%, 50%)`;
+  
+  platforms.forEach(function(platform) {
+    context.beginPath();
+    context.roundRect(platform.x, platform.y, platformWidth, platformHeight, 10);
+    context.fill();
+    context.strokeStyle = 'rgba(0,0,0,0.3)';
+    context.lineWidth = 5;
+    context.stroke();
+  });
+
+  // Игрок
+  if (sprite_is_load) {
+    context.drawImage(
+      sprite,
+      doodle.anim.currentFrame * SPRITE_WIDTH, 0, SPRITE_WIDTH, SPRITE_HEIGHT,
+      doodle.x, doodle.y, doodle.width, doodle.height
+    );
+  } else {
+    context.fillStyle = 'yellow';
+    context.fillRect(doodle.x, doodle.y, doodle.width, doodle.height);
+  }
+
+  // FPS
+  context.fillStyle = 'rgba(0,0,0,0.5)';
+  context.font = '12px Arial';
+  const avgFPS = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length || 0;
+  context.fillText(`FPS: ${Math.round(avgFPS)}`, 10, 20);
+
+  if (happy_birthday_overlay) {
+    // Полупрозрачный фон для оверлея
+    context.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Рисуем сердечки
+    heartParticles.forEach(heart => heart.draw(context));
+    
+    // Рисуем текст
+    context.save();
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    
+    // Тень для текста
+    context.shadowColor = 'rgba(255, 107, 107, 0.5)';
+    context.shadowBlur = 30;
+    
+    // Основной текст
+    context.font = `bold ${canvas.height * 0.04}px Arial`;
+    context.fillStyle = '#fffb8b';
+    context.shadowColor = 'rgba(255, 107, 107, 0.8)';
+    context.shadowBlur = 40;
+    context.fillText('🎂 С ДНЕМ РОЖДЕНИЯ! 🎂', canvas.width / 2, canvas.height / 2 - 40);
+    
+    // Подзаголовок
+    context.font = `${canvas.height * 0.028}px Arial`;
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    context.shadowBlur = 20;
+    context.fillText('❤️ Пусть все мечты сбываются! ❤️', canvas.width / 2, canvas.height / 2 + 30);
+    
+    context.restore();
+  }
+}
+
+function loop() {
+  if (shouldUpdate()) {
+    update();
+    render();
+  }
+  requestAnimationFrame(loop);
+}
+
+// Запуск
+requestAnimationFrame(loop);
+
+// ============================================
+// Управление
+// ============================================
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+});
+
+canvas.addEventListener('touchmove', (e) => {
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  mouseX = touch.clientX - rect.left;
+});
+
+
+
+
+canvas.addEventListener('click', () => {
+  if (!gameStart) {
+    gameStart = true;
+    doodle.dy = bounceVelocity;
+    const overlay = document.getElementById('ui-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('touchstart', (e) => {
+  e.maxentDefault();
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (touch.clientX - rect.left) / canvas.width * canvas.width;
+  if (!gameStart) {
+    gameStart = true;
+    doodle.dy = bounceVelocity;
+    const overlay = document.getElementById('ui-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key == ' ' || e.key === 'Space') {
+    gameStart = !gameStart;
+  }
+});
+
+window.addEventListener('resize', resize);
+
+sprite.addEventListener('load', () => {
+  console.log('Спрайт загружен!');
+  sprite_is_load = true;
+});
+
+// Полифилл для roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (r > w/2) r = w/2;
+    if (r > h/2) r = h/2;
+    this.moveTo(x + r, y);
+    this.lineTo(x + w - r, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r);
+    this.lineTo(x + w, y + h - r);
+    this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    this.lineTo(x + r, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r);
+    this.lineTo(x, y + r);
+    this.quadraticCurveTo(x, y, x + r, y);
+    this.closePath();
+    return this;
+  };
+}
+
+// Создаем начальный оверлей
+const overlay = document.createElement('div');
+overlay.id = 'ui-overlay';
+overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;text-align:center;pointer-events:none;z-index:10;text-shadow:2px 2px 4px rgba(0,0,0,0.5)';
+overlay.innerHTML = '<div style="font-size:48px;font-weight:bold;margin-bottom:10px;">Ксюша Jump</div><div style="font-size:18px;opacity:0.8;">Кликните чтобы начать 🎮</div>';
+document.body.appendChild(overlay);
+
+
+</script>
+</body>
+</html>
